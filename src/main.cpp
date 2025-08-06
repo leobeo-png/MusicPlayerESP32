@@ -3,20 +3,13 @@
 #include "Display.h"
 #include "Pinout.h"
 
-// Digital I/O used
 #define SD_CS          5
-// #define TFT_CS         4
-// #define TFT_DC         2
 #define SPI_MOSI      23
 #define SPI_MISO      19
 #define SPI_SCK       18
 #define I2S_DOUT      16
 #define I2S_BCLK      21
 #define I2S_LRC       17
-#define Button_Volume_Up  27
-#define Button_Volume_Down  26
-#define Next_Song_Button  25
-#define Previous_Song_Button  33
 
 unsigned long lastButtonCheck = 0;
 const unsigned long buttonCheckInterval = 100; // Check every 200 ms
@@ -24,8 +17,9 @@ const unsigned long buttonCheckInterval = 100; // Check every 200 ms
 TFT_eSPI tft = TFT_eSPI(); 
 Audio audio;
 MusicManager musicManager;
-Controls controls(audio, musicManager);
 Display display(tft, 320, 240);
+Controls controls(audio, musicManager, display);
+
 
 // global instance pointer for callbacks
 Display* g_display = nullptr;
@@ -34,10 +28,7 @@ void setup() {
     // Pin setup
     pinMode(SD_CS, OUTPUT);  
     pinMode(TFT_CS, OUTPUT);
-    pinMode(Button_Volume_Up, INPUT_PULLUP);
-    pinMode(Button_Volume_Down, INPUT_PULLUP);
-    pinMode(Next_Song_Button, INPUT_PULLUP);
-    pinMode(Previous_Song_Button, INPUT_PULLUP);
+    controls.controlPins();
     
     // Initialize with both CS pins HIGH (deselected)
     digitalWrite(SD_CS, HIGH);
@@ -68,6 +59,10 @@ void setup() {
 void loop(){
     audio.loop();
     display.audioTime(); 
+    display.progressBar();
+    controls.debounceButton(); 
+    controls.checkEncoderChange();
+    display.updateVolumeBar();
     vTaskDelay(2);
 }
 
@@ -77,4 +72,9 @@ void audio_info(const char *info) {
 
 void audio_id3data(const char *info) {
     if(g_display) g_display->audio_id3data(info);
+}
+
+void audio_eof_mp3(const char *info){  //end of file
+    if(g_display) g_display->audio_info(info);
+    controls.playNext(); 
 }

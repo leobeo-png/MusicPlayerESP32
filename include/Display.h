@@ -13,6 +13,9 @@ class Display {
         TFT_eSPI& tft;
         const int Screen_Width;
         const int Screen_Height;
+        unsigned long lastVolumeChange = 0;
+        bool volumeBarVisible = false;
+        int currentVolume = 0;
 
     public:
         Display(TFT_eSPI& tftRef, int screenWidth, int screenHeight = 240) 
@@ -20,8 +23,12 @@ class Display {
         void init();
         void clearScreen();
         void audioTime();
+        void progressBar();
+        void showVolumeBar(int volume);
+        void updateVolumeBar();
         void audio_info(const char *info);
         void audio_id3data(const char *info);  
+        void audio_eof_mp3(const char *info); 
         unsigned long lastUpdateTimeline = 0;
 
     

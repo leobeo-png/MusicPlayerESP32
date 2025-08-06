@@ -32,6 +32,55 @@ void Display::audioTime() {
     
 }
 
+void Display::progressBar() {
+    static int lastBarWidth = -1;
+    
+    unsigned long currentMillis = millis(); // updates each second
+    if (currentMillis - lastUpdateTimeline >= 1000) {
+        return;  
+    }
+    unsigned long totalTime = audio.getAudioFileDuration();
+    unsigned long currentTime = audio.getAudioCurrentTime();
+
+    if (totalTime == 0) {
+        return; // Avoid division by zero
+    }
+
+    int progress = (int((uint64_t)(Screen_Width - 20) * currentTime / totalTime));
+
+    if(progress != lastBarWidth) {
+        //clear only previous part if shrinking
+        if (progress < lastBarWidth) {
+            tft.fillRect(10 + progress, 130, lastBarWidth - progress, 10, TFT_BLACK);
+        }
+        
+        //draw new part
+        tft.fillRect(10, 130, progress, 10, TFT_WHITE);
+
+        tft.drawRect(10, 130, Screen_Width - 20, 10, TFT_WHITE);
+        lastBarWidth = progress;
+    }
+
+}
+
+void Display::showVolumeBar(int volume) {
+    currentVolume = volume;
+    lastVolumeChange = millis();
+    volumeBarVisible = true;
+
+    int barWidth = map(volume, 0, 21, 0, 40);
+    tft.fillRect(240, 110, 60, 10, TFT_BLACK); // Clear previous
+    tft.fillRect(240, 110, barWidth, 10, TFT_CYAN);
+    tft.drawRect(240, 110, 60 - 20, 10, TFT_WHITE);
+}
+
+void Display::updateVolumeBar() {
+    if (volumeBarVisible && (millis() - lastVolumeChange > 2000)) {
+        // Hide the bar after 2 seconds
+        tft.fillRect(239, 108, 62, 12, TFT_BLACK);
+        volumeBarVisible = false;
+    }
+}
 
 void Display::audio_info(const char *info){
     Serial.print("info        ");Serial.println(info);
@@ -56,4 +105,8 @@ void Display::audio_id3data(const char *info){  //id3 metadata
         tft.setCursor(10, 50);
         tft.println(Artist);
     }
+}
+
+void Display::audio_eof_mp3(const char *info){  //end of file
+    // flag for repeat
 }
