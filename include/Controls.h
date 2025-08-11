@@ -6,8 +6,8 @@
 #include "MusicManager.h"
 #include "Display.h"
 
-#define Encoder_Volume_Up  26
-#define Encoder_Volume_Down  27
+#define Encoder_Volume_Up  27
+#define Encoder_Volume_Down  26
 #define Next_Song_Button  25
 #define Previous_Song_Button  33
 #define Play_Pause_Button 14

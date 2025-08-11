@@ -1,15 +1,36 @@
 #include "Display.h"
 
+
+
 void Display::init() {
+    turnOnScreen();
     tft.init();
-    tft.setRotation(3);
+    tft.setRotation(2);
     tft.setSwapBytes(true);
     tft.fillScreen(TFT_BLACK);
-    tft.loadFont("/fonts/ZenMaruGothic-Regular-24", SD);
+    tft.loadFont("/fonts/ZenMaruGothic-Regular-16-minJap-noSmooth", SD);
 }
 
 void Display::clearScreen() {
     tft.fillScreen(TFT_BLACK);
+}
+
+void Display::turnOnScreen() {
+    digitalWrite(TFT_BL, HIGH); 
+    screenOn = true;
+}
+
+void Display::turnOffScreen() {
+    digitalWrite(TFT_BL, LOW);
+    screenOn = false; 
+}
+
+
+void Display::scanSongs() {
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.setCursor(50, 100);
+    tft.println("Scanning for songs...");
 }
 
 void Display::audioTime() {
@@ -69,9 +90,9 @@ void Display::showVolumeBar(int volume) {
     volumeBarVisible = true;
 
     int barWidth = map(volume, 0, 21, 0, 40);
-    tft.fillRect(240, 110, 60, 10, TFT_BLACK); // Clear previous
-    tft.fillRect(240, 110, barWidth, 10, TFT_CYAN);
-    tft.drawRect(240, 110, 60 - 20, 10, TFT_WHITE);
+    tft.fillRect(Screen_Width - 40, 110, 60, 10, TFT_BLACK); // Clear previous
+    tft.fillRect(Screen_Width - 40, 110, barWidth, 10, TFT_CYAN);
+    tft.drawRect(Screen_Width - 40, 110, 60 - 20, 10, TFT_WHITE);
 }
 
 void Display::updateVolumeBar() {
@@ -82,27 +103,78 @@ void Display::updateVolumeBar() {
     }
 }
 
+void Display::menuListSongs() {
+    
+    tft.fillRect(0, 153, Screen_Width, 90, TFT_BLACK);
+
+    for (int i = 0; i < visibleItems; i++) {
+        int songIndex = menuStartIndex + i;
+        if (songIndex >= musicManager.getSongCount("/song_index.txt")) {
+            break; // No more songs to display
+        }
+        String songName = musicManager.getSongByIndex("/song_index.txt", songIndex);
+
+        int lastSlash = songName.lastIndexOf('/');
+        if (lastSlash >= 0) {
+            songName = songName.substring(lastSlash + 1 );
+        }
+
+        if (songIndex == menuSelection) {
+            tft.setTextColor(TFT_BLACK, TFT_CYAN, true);
+        } else {
+            tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        }
+
+        tft.setCursor(10, 155 + i * 20);
+        tft.setTextWrap(false);
+        tft.print(songName);
+        Serial.println("menu    " + songName);
+    }
+
+}
+
+
+void Display::menuSelectSong(int index) {
+    int songCount = musicManager.getSongCount("/song_index.txt");
+    if (index < 0) index = 0;
+    if (index >= songCount) {
+        index = songCount - 1;
+    }
+    menuSelection = index;
+
+    
+
+    if (menuSelection < menuStartIndex) {
+        menuStartIndex = menuSelection; // Adjust start index if selection is above current start
+    } else if (menuSelection >= menuStartIndex + visibleItems) {
+        menuStartIndex = menuSelection - (visibleItems - 3); // Adjust start index if selection is below current start
+    }
+
+    if (menuStartIndex > songCount - visibleItems) {
+        menuStartIndex = max(0, songCount - visibleItems);
+    }
+    menuListSongs();
+}
+
+
 void Display::audio_info(const char *info){
-    Serial.print("info        ");Serial.println(info);
 }
 
 void Display::audio_id3data(const char *info){  //id3 metadata
-    Serial.print("id3data     ");Serial.println(info);
-
+    tft.setTextWrap(true);
     if(strstr(info, "Title: ") == info) {
-        const char* title = info + 7; // Skip "Title: "
-        tft.fillRect(0, 10, Screen_Width, 40, TFT_BLACK);
-        
+        String Title = String(info + 7); // Skip "Artist: "
+        tft.fillRect(0, 18, Screen_Width, 45, TFT_BLACK);
         tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-        tft.setCursor(10, 10);
-        tft.println(title);
+        tft.setCursor(10, 20);
+        tft.println(Title);
     }
 
     if(strstr(info, "Artist: ") == info) {
         String Artist = String(info + 8); // Skip "Artist: "
-        tft.fillRect(0, 50, Screen_Width, 20, TFT_BLACK);
+        tft.fillRect(0, 73, Screen_Width, 22, TFT_BLACK);
         tft.setTextColor(TFT_WHITE, TFT_BLACK);
-        tft.setCursor(10, 50);
+        tft.setCursor(10, 75);
         tft.println(Artist);
     }
 }

@@ -22,22 +22,24 @@ void Controls::controlPins() {
 }
 
 void Controls::playSong(int index) {
-    if (index < 0 || index >= musicManager.getSongCount()) {
+    if (index < 0 || index >= musicManager.getSongCount("/song_index.txt")) {
         return;
     }
-    String songPath = musicManager.getSongByIndex(index);
+    String songPath = musicManager.getSongByIndex("/song_index.txt", index);
     Serial.println("Playing: " + songPath);
     audio.connecttoFS(SD, songPath.c_str());
 }
 
 void Controls::playNext() {
-    currentSongIndex = (currentSongIndex + 1) % musicManager.getSongCount();
+    currentSongIndex = (currentSongIndex + 1) % musicManager.getSongCount("/song_index.txt");
     playSong(currentSongIndex);
+    display.menuSelectSong(currentSongIndex); 
 }
 
 void Controls::playPrev() {
-    currentSongIndex = (currentSongIndex - 1 + musicManager.getSongCount()) % musicManager.getSongCount();
+    currentSongIndex = (currentSongIndex - 1 + musicManager.getSongCount("/song_index.txt")) % musicManager.getSongCount("/song_index.txt");
     playSong(currentSongIndex);
+    display.menuSelectSong(currentSongIndex); 
 }
 
 void Controls::VolumeUp() {
@@ -54,19 +56,30 @@ void Controls::VolumeDown() {
     display.showVolumeBar(audio.getVolume()); 
 }
 
+
 void Controls::debounceButton() {
+    bool inputDetected = false;
     unsigned long currentMillis = millis();
 
     if (currentMillis - lastButtonCheck >= buttonCheckInterval) {
         lastButtonCheck = currentMillis;
         if (digitalRead(Next_Song_Button) == LOW) {
             playNext();
+            inputDetected = true;
         }
         if (digitalRead(Previous_Song_Button) == LOW) {
             playPrev();
+            inputDetected = true;
         }
         if (digitalRead(Play_Pause_Button) == LOW) {
             audio.pauseResume();
+            inputDetected = true;
+        }
+    }
+    if (inputDetected) {
+        display.lastInteraction = millis(); 
+        if (!display.screenOn) {
+            display.turnOnScreen();
         }
     }
 }
@@ -92,6 +105,7 @@ void IRAM_ATTR Controls::encoderISR() {
 }
 
 void Controls::checkEncoderChange() {
+    bool inputDetected = false;
     static int lastEncoderPos = 0;
     
     if (encoderPos != lastEncoderPos) {
@@ -99,10 +113,19 @@ void Controls::checkEncoderChange() {
         
         if (diff > 0) {
             VolumeUp();
+            inputDetected = true;
         } else if (diff < 0) {
             VolumeDown();
+            inputDetected = true;
         }
         
         lastEncoderPos = encoderPos;
+    }
+
+    if (inputDetected) {
+        display.lastInteraction = millis(); 
+        if (!display.screenOn) {
+            display.turnOnScreen();
+        }
     }
 }

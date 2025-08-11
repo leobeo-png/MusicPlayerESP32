@@ -17,7 +17,7 @@ const unsigned long buttonCheckInterval = 100; // Check every 200 ms
 TFT_eSPI tft = TFT_eSPI(); 
 Audio audio;
 MusicManager musicManager;
-Display display(tft, 320, 240);
+Display display(tft, musicManager, 240, 320);
 Controls controls(audio, musicManager, display);
 
 
@@ -42,28 +42,36 @@ void setup() {
         Serial.println("SD Card initialization failed!");
         return;
     }
-    
-    // Read SD contents while SD is initialized
-    musicManager.readSD();
-    
+        
     // Initialize TFT
     display.init();
     g_display = &display; // Set global display pointer
+
+    // Read SD contents while SD is initialized
+    musicManager.buildSongIndex("/music", "/song_index.txt");
+    display.scanSongs();
     
+
     // Audio settings
     audio.setVolume(14);
     controls.playSong(0);
+
+    display.clearScreen();
+    display.menuListSongs();
 }
 
 
 void loop(){
     audio.loop();
-    display.audioTime(); 
-    display.progressBar();
     controls.debounceButton(); 
     controls.checkEncoderChange();
+    display.audioTime(); 
+    display.progressBar();
     display.updateVolumeBar();
-    vTaskDelay(2);
+    if(display.screenOn && millis() - display.lastInteraction > 30000) {
+        display.turnOffScreen(); // Turn off screen after 30 seconds of inactivity
+    }
+    vTaskDelay(1);
 }
 
 void audio_info(const char *info) {
