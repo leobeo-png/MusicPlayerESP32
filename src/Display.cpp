@@ -54,17 +54,13 @@ void Display::audioTime() {
 }
 
 void Display::progressBar() {
-    static int lastBarWidth = -1;
-    
     unsigned long currentMillis = millis(); // updates each second
-    if (currentMillis - lastUpdateTimeline >= 1000) {
-        return;  
-    }
+    
     unsigned long totalTime = audio.getAudioFileDuration();
     unsigned long currentTime = audio.getAudioCurrentTime();
 
     if (totalTime == 0) {
-        return; // Avoid division by zero
+        return; // avoid division by zero
     }
 
     int progress = (int((uint64_t)(Screen_Width - 20) * currentTime / totalTime));
@@ -73,12 +69,13 @@ void Display::progressBar() {
         //clear only previous part if shrinking
         if (progress < lastBarWidth) {
             tft.fillRect(10 + progress, 130, lastBarWidth - progress, 10, TFT_BLACK);
-        }
-        
-        //draw new part
-        tft.fillRect(10, 130, progress, 10, TFT_WHITE);
+        } else {
+            tft.fillRect(10, 130, progress, 10, TFT_WHITE);
+           
+        }      
 
         tft.drawRect(10, 130, Screen_Width - 20, 10, TFT_WHITE);
+        
         lastBarWidth = progress;
     }
 
@@ -90,22 +87,21 @@ void Display::showVolumeBar(int volume) {
     volumeBarVisible = true;
 
     int barWidth = map(volume, 0, 21, 0, 40);
-    tft.fillRect(Screen_Width - 40, 110, 60, 10, TFT_BLACK); // Clear previous
-    tft.fillRect(Screen_Width - 40, 110, barWidth, 10, TFT_CYAN);
-    tft.drawRect(Screen_Width - 40, 110, 60 - 20, 10, TFT_WHITE);
+    tft.fillRect(Screen_Width - 50, 150, 60, 10, TFT_BLACK);
+    tft.fillRect(Screen_Width - 50, 150, barWidth, 10, TFT_CYAN);
+    tft.drawRect(Screen_Width - 50, 150, 60 - 20, 10, TFT_WHITE);    
 }
 
 void Display::updateVolumeBar() {
     if (volumeBarVisible && (millis() - lastVolumeChange > 2000)) {
-        // Hide the bar after 2 seconds
-        tft.fillRect(239, 108, 62, 12, TFT_BLACK);
+        tft.fillRect(Screen_Width - 52, 148, 62, 12, TFT_BLACK);
         volumeBarVisible = false;
     }
 }
 
 void Display::menuListSongs() {
-    
-    tft.fillRect(0, 153, Screen_Width, 90, TFT_BLACK);
+    int yPos = 240;
+    tft.fillRect(0, yPos - 2, Screen_Width, Screen_Height - (yPos - 2), TFT_BLACK);
 
     for (int i = 0; i < visibleItems; i++) {
         int songIndex = menuStartIndex + i;
@@ -125,10 +121,9 @@ void Display::menuListSongs() {
             tft.setTextColor(TFT_WHITE, TFT_BLACK);
         }
 
-        tft.setCursor(10, 155 + i * 20);
+        tft.setCursor(10, yPos + i * 20);
         tft.setTextWrap(false);
         tft.print(songName);
-        Serial.println("menu    " + songName);
     }
 
 }
@@ -157,28 +152,68 @@ void Display::menuSelectSong(int index) {
 }
 
 
+void Display::batteryLevel(int pin) {
+    int raw = analogRead(pin);
+    float adcVoltage = ((float)raw * Vref) / ADC_MAX; 
+    float batteryVoltage = adcVoltage / K;
+
+    int batteryPercent = (int)(((batteryVoltage - VBatteryMin) / (VBatteryMax - VBatteryMin)) * 100);
+    batteryPercent = constrain(batteryPercent, 0, 100);
+
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastProgressUpdate >= 5000) { // Update every minute
+        lastProgressUpdate = currentMillis;
+        tft.fillRect(Screen_Width - 30, 8, 26, 16, TFT_BLACK);
+        tft.drawRect(Screen_Width - 28, 10, 20, 12, TFT_WHITE); 
+        tft.fillRect(Screen_Width - 8, 14, 4, 4, TFT_WHITE);
+        
+        int fillWidth = map(batteryPercent, 0, 100, 0, 18);
+        if (fillWidth > 0) {
+            tft.fillRect(Screen_Width - 27, 11, fillWidth, 10, TFT_GREEN);
+        }
+    }
+}
+
+void Display::pauseIcon(bool paused) {
+    if (paused) {
+        tft.fillRect(Screen_Width - 30, 90, 25, 30, TFT_BLACK);
+        tft.fillRect(Screen_Width - 25, 95, 5, 20, TFT_WHITE);
+        tft.fillRect(Screen_Width - 15, 95, 5, 20, TFT_WHITE);
+    } else {
+        tft.fillRect(Screen_Width - 30, 90, 20, 30, TFT_BLACK);
+        tft.fillTriangle(Screen_Width - 25, 95, Screen_Width - 25, 115, Screen_Width - 10, 105, TFT_WHITE);
+    }
+}
+
+
+
 void Display::audio_info(const char *info){
+    
 }
 
 void Display::audio_id3data(const char *info){  //id3 metadata
     tft.setTextWrap(true);
     if(strstr(info, "Title: ") == info) {
         String Title = String(info + 7); // Skip "Artist: "
-        tft.fillRect(0, 18, Screen_Width, 45, TFT_BLACK);
+        tft.fillRect(0, 28, Screen_Width, 43, TFT_BLACK);
         tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-        tft.setCursor(10, 20);
+        tft.setCursor(10, 30);
         tft.println(Title);
     }
 
     if(strstr(info, "Artist: ") == info) {
-        String Artist = String(info + 8); // Skip "Artist: "
+        String Artist = String(info + 8); 
         tft.fillRect(0, 73, Screen_Width, 22, TFT_BLACK);
         tft.setTextColor(TFT_WHITE, TFT_BLACK);
         tft.setCursor(10, 75);
         tft.println(Artist);
     }
+
+    Serial.print("id3 ");Serial.println(info);
 }
 
 void Display::audio_eof_mp3(const char *info){  //end of file
     // flag for repeat
 }
+
+

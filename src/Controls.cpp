@@ -11,9 +11,6 @@ Controls::Controls(Audio& audioRef, MusicManager& musicRef, Display& displayRef)
 }
 
 void Controls::controlPins() {
-    pinMode(Next_Song_Button, INPUT_PULLUP);
-    pinMode(Previous_Song_Button, INPUT_PULLUP);
-    pinMode(Play_Pause_Button, INPUT_PULLUP);
     pinMode(Encoder_Volume_Up, INPUT_PULLUP);
     pinMode(Encoder_Volume_Down, INPUT_PULLUP);
 
@@ -57,32 +54,7 @@ void Controls::VolumeDown() {
 }
 
 
-void Controls::debounceButton() {
-    bool inputDetected = false;
-    unsigned long currentMillis = millis();
 
-    if (currentMillis - lastButtonCheck >= buttonCheckInterval) {
-        lastButtonCheck = currentMillis;
-        if (digitalRead(Next_Song_Button) == LOW) {
-            playNext();
-            inputDetected = true;
-        }
-        if (digitalRead(Previous_Song_Button) == LOW) {
-            playPrev();
-            inputDetected = true;
-        }
-        if (digitalRead(Play_Pause_Button) == LOW) {
-            audio.pauseResume();
-            inputDetected = true;
-        }
-    }
-    if (inputDetected) {
-        display.lastInteraction = millis(); 
-        if (!display.screenOn) {
-            display.turnOnScreen();
-        }
-    }
-}
 
 void IRAM_ATTR Controls::encoderISR() {
     if (instance) {
@@ -107,21 +79,44 @@ void IRAM_ATTR Controls::encoderISR() {
 void Controls::checkEncoderChange() {
     bool inputDetected = false;
     static int lastEncoderPos = 0;
+    static bool lastButtonState = HIGH;
     
     if (encoderPos != lastEncoderPos) {
         int diff = encoderPos - lastEncoderPos;
-        
+        bool pressed = (digitalRead(Encoder_Button) == LOW);
+
         if (diff > 0) {
-            VolumeUp();
+            if(pressed) {
+                playNext();
+            } else {
+                VolumeUp();
+            }
             inputDetected = true;
         } else if (diff < 0) {
-            VolumeDown();
+            if(pressed) {
+                playPrev();
+            } else {
+                VolumeDown();
+            }
             inputDetected = true;
         }
         
         lastEncoderPos = encoderPos;
     }
 
+    unsigned long currentMillis = millis();
+
+    if (currentMillis - lastButtonCheck >= buttonCheckInterval) {
+        lastButtonCheck = currentMillis;
+        bool currentButtonCheck = digitalRead(Encoder_Button);
+
+        if (lastButtonState == HIGH && currentButtonCheck == LOW) {
+            audio.pauseResume();
+            display.pauseIcon(!audio.isRunning());
+            inputDetected = true;
+        }
+        lastButtonState = currentButtonCheck;
+    }
     if (inputDetected) {
         display.lastInteraction = millis(); 
         if (!display.screenOn) {

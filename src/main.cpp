@@ -7,9 +7,10 @@
 #define SPI_MOSI      23
 #define SPI_MISO      19
 #define SPI_SCK       18
-#define I2S_DOUT      16
-#define I2S_BCLK      21
+#define I2S_DOUT      21
+#define I2S_BCLK      16
 #define I2S_LRC       17
+#define BatteryVoltage 34
 
 unsigned long lastButtonCheck = 0;
 const unsigned long buttonCheckInterval = 100; // Check every 200 ms
@@ -21,16 +22,16 @@ Display display(tft, musicManager, 240, 320);
 Controls controls(audio, musicManager, display);
 
 
-// global instance pointer for callbacks
+
 Display* g_display = nullptr;
 
 void setup() {
-    // Pin setup
+
     pinMode(SD_CS, OUTPUT);  
     pinMode(TFT_CS, OUTPUT);
     controls.controlPins();
     
-    // Initialize with both CS pins HIGH (deselected)
+
     digitalWrite(SD_CS, HIGH);
     digitalWrite(TFT_CS, HIGH);
     
@@ -42,17 +43,13 @@ void setup() {
         Serial.println("SD Card initialization failed!");
         return;
     }
-        
-    // Initialize TFT
-    display.init();
-    g_display = &display; // Set global display pointer
 
-    // Read SD contents while SD is initialized
+    display.init();
+    g_display = &display;
+
     musicManager.buildSongIndex("/music", "/song_index.txt");
     display.scanSongs();
-    
 
-    // Audio settings
     audio.setVolume(14);
     controls.playSong(0);
 
@@ -63,13 +60,13 @@ void setup() {
 
 void loop(){
     audio.loop();
-    controls.debounceButton(); 
     controls.checkEncoderChange();
     display.audioTime(); 
     display.progressBar();
     display.updateVolumeBar();
+    display.batteryLevel(BatteryVoltage);
     if(display.screenOn && millis() - display.lastInteraction > 30000) {
-        display.turnOffScreen(); // Turn off screen after 30 seconds of inactivity
+        display.turnOffScreen(); 
     }
     vTaskDelay(1);
 }
@@ -83,6 +80,7 @@ void audio_id3data(const char *info) {
 }
 
 void audio_eof_mp3(const char *info){  //end of file
-    if(g_display) g_display->audio_info(info);
+    if(g_display) g_display->audio_eof_mp3(info);
     controls.playNext(); 
 }
+

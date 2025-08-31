@@ -15,11 +15,20 @@ class Display {
         const int Screen_Width;
         const int Screen_Height;
         unsigned long lastVolumeChange = 0;
+        int lastBarWidth = -1;
+        int lastVolumeBarWidth = -1;
         bool volumeBarVisible = false;
         int currentVolume = 0;
         int menuStartIndex = 0;
         int menuSelection = 0;
-        const int visibleItems = 8;
+        const int visibleItems = 4;
+        const float R1 = 47.0;
+        const float R2 = 100.0;
+        const float K = R2 / (R1 + R2);
+        const float Vref = 3.3;
+        const int ADC_MAX = 4095;
+        const float VBatteryMax = 3.6;
+        const float VBatteryMin = 2.4;
 
     public:
         Display(TFT_eSPI& tftRef, MusicManager& musicRef, int screenWidth, int screenHeight) 
@@ -35,10 +44,13 @@ class Display {
         void updateVolumeBar();
         void menuListSongs();
         void menuSelectSong(int index);
+        void batteryLevel(int pin);
+        void pauseIcon(bool paused);
         void audio_info(const char *info);
         void audio_id3data(const char *info);  
         void audio_eof_mp3(const char *info); 
         unsigned long lastUpdateTimeline = 0;
+        unsigned long lastProgressUpdate = 0;
         unsigned long lastInteraction = 0;
         bool screenOn = true;
 
