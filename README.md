@@ -24,6 +24,34 @@ This project was a way to explore I²S audio and the [ESP32-audioI2S](https://gi
 - SD card slot
 ---
 
+## Controls
+| Action | Now Playing | Browse list |
+|---|---|---|
+| Rotate | Volume | Move cursor |
+| Click | Play / pause | Play selected song |
+| Hold + rotate | Next / previous track (prev restarts song if >3 s in) | Fast scroll |
+| Long press (0.7 s) | Open browse list | Close list |
+| Hold at power-on | Force library rescan | |
+
+Screen dims after 10 s and sleeps after 30 s. Paused for 10 min with the screen off -> deep sleep; press the knob to wake and resume where you left off.
+
+## Firmware layout
+| File | Role |
+|---|---|
+| `include/Config.h` | All pins and tunables |
+| `Player` | Audio task on core 0, command queue, NVS resume (track, position, volume) |
+| `MusicLibrary` | Song index on SD with in-RAM line offsets (O(1) lookup) |
+| `Input` | Quadrature state-machine encoder ISR + button click/long-press FSM |
+| `Ui` | Diff-based TFT drawing, browse list, dim/sleep |
+| `Battery` | Calibrated ADC, LiPo curve |
+
+TFT pins (CS 15, DC 2, RST -> EN, BL) are set in TFT_eSPI's `User_Setup.h` — see the note in `platformio.ini`.
+
+### Japanese font in flash (recommended)
+Copy the `.vlw` from the SD card's `/fonts` folder to your PC and run
+`python tools/vlw_to_header.py ZenMaruGothic-Regular-16-minJap-noSmooth.vlw`.
+This creates `include/font_jp.h`; the firmware then stops reading glyphs from the SD card.
+
 ## Features
 - Play music via I²S using the ESP32
 	- supports .mp3 and .wav

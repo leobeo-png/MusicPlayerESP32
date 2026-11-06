@@ -1,86 +1,127 @@
-#include "MusicManager.h"
-#include "Controls.h"
-#include "Display.h"
-#include "Pinout.h"
+// ESP32 MP3 player
+//   core 0: audio task (Player)  — decode + I2S, never blocked by the display
+//   core 1: Arduino loop()       — input, UI, battery, power
+#include <Arduino.h>
+#include <SPI.h>
+#include <SD.h>
+#include <driver/rtc_io.h>
+#include "Config.h"
+#include "MusicLibrary.h"
+#include "Player.h"
+#include "Input.h"
+#include "Ui.h"
+#include "Battery.h"
 
-#define SD_CS          5
-#define SPI_MOSI      23
-#define SPI_MISO      19
-#define SPI_SCK       18
-#define I2S_DOUT      21
-#define I2S_BCLK      16
-#define I2S_LRC       17
-#define BatteryVoltage 34
+static TFT_eSPI     tft;
+static MusicLibrary library;
+static Player       player(library);
+static Input        input;
+static Ui           ui(tft, library);
+static Battery      battery;
 
-unsigned long lastButtonCheck = 0;
-const unsigned long buttonCheckInterval = 100; // Check every 200 ms
+static uint32_t pausedSince = 0;  // 0 = playing
 
-TFT_eSPI tft = TFT_eSPI(); 
-Audio audio;
-MusicManager musicManager;
-Display display(tft, musicManager, 240, 320);
-Controls controls(audio, musicManager, display);
+static bool belowCutoff(uint16_t mv, uint16_t cutoff) {
+    return cutoff && mv > 1000 && mv < cutoff;  // >1000: ignore "no divider / USB only" readings
+}
 
+[[noreturn]] static void deepSleep(const char* why) {
+    Serial.printf("[pwr] deep sleep: %s\n", why);
+    if (!player.status().paused) {
+        player.send(PlayerCmd::TogglePause);  // pausing saves the resume position to NVS
+        delay(150);
+    }
+    ui.touch();  // panel may be asleep
+    ui.message(why, "Press knob to wake");
+    delay(1500);
+    ui.sleepPanel();
+    rtc_gpio_pullup_en((gpio_num_t)cfg::PIN_ENC_SW);
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)cfg::PIN_ENC_SW, 0);
+    Serial.flush();
+    esp_deep_sleep_start();
+}
 
-
-Display* g_display = nullptr;
+static void mountSd() {
+    pinMode(cfg::PIN_SD_CS, OUTPUT);
+    digitalWrite(cfg::PIN_SD_CS, HIGH);
+    while (!SD.begin(cfg::PIN_SD_CS, SPI, cfg::SD_SPI_HZ)) {
+        Serial.println("[sd] mount failed");
+        ui.message("No SD card", "Insert card, retrying...");
+        delay(2000);
+    }
+}
 
 void setup() {
-
-    pinMode(SD_CS, OUTPUT);  
-    pinMode(TFT_CS, OUTPUT);
-    controls.controlPins();
-    
-
-    digitalWrite(SD_CS, HIGH);
-    digitalWrite(TFT_CS, HIGH);
-    
-    SPI.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
-    audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
     Serial.begin(115200);
-    
-    if (!SD.begin(SD_CS)) {
-        Serial.println("SD Card initialization failed!");
-        return;
+    setCpuFrequencyMhz(cfg::CPU_MHZ);
+
+    pinMode(cfg::PIN_SD_CS, OUTPUT);
+    digitalWrite(cfg::PIN_SD_CS, HIGH);  // keep SD off the bus while the panel initialises
+    SPI.begin(cfg::PIN_SPI_SCK, cfg::PIN_SPI_MISO, cfg::PIN_SPI_MOSI);
+
+    ui.begin();
+    input.begin();
+    mountSd();
+    ui.loadFont();
+
+    const bool rescan = cfg::RESCAN_ON_BOOT || input.buttonHeld();
+    ui.message(rescan ? "Scanning library..." : "Loading library...");
+    library.begin(rescan);
+    while (library.count() == 0) {
+        ui.message("No songs found", "Add files to /music, click to rescan");
+        while (input.poll().ev != InputEvent::Click) delay(10);
+        ui.message("Scanning library...");
+        library.begin(true);
     }
 
-    display.init();
-    g_display = &display;
-
-    musicManager.buildSongIndex("/music", "/song_index.txt");
-    display.scanSongs();
-
-    audio.setVolume(14);
-    controls.playSong(0);
-
-    display.clearScreen();
-    display.menuListSongs();
+    battery.begin();
+    player.begin();
+    ui.clear();
 }
 
-
-void loop(){
-    audio.loop();
-    controls.checkEncoderChange();
-    display.audioTime(); 
-    display.progressBar();
-    display.updateVolumeBar();
-    display.batteryLevel(BatteryVoltage);
-    if(display.screenOn && millis() - display.lastInteraction > 30000) {
-        display.turnOffScreen(); 
+static void handleInput() {
+    for (InputMsg m; (m = input.poll()).ev != InputEvent::None;) {
+        ui.touch();
+        switch (m.ev) {
+        case InputEvent::Rotate:
+            if (ui.browsing()) ui.browseMove(m.value);
+            else { player.send(PlayerCmd::VolumeDelta, m.value); ui.showVolume(); }
+            break;
+        case InputEvent::RotateHeld:
+            if (ui.browsing()) { ui.browseMove(m.value * 4); break; }  // held = fast scroll
+            for (int i = 0; i < abs(m.value); ++i)
+                player.send(m.value > 0 ? PlayerCmd::Next : PlayerCmd::Prev);
+            break;
+        case InputEvent::Click:
+            if (ui.browsing()) player.send(PlayerCmd::PlayIndex, ui.browseEnd());
+            else player.send(PlayerCmd::TogglePause);
+            break;
+        case InputEvent::LongPress:
+            if (ui.browsing()) ui.browseEnd();
+            else ui.browseStart(player.status().track);
+            break;
+        default: break;
+        }
     }
-    vTaskDelay(1);
 }
 
-void audio_info(const char *info) {
-    if(g_display) g_display->audio_info(info);
-}
+void loop() {
+    handleInput();
 
-void audio_id3data(const char *info) {
-    if(g_display) g_display->audio_id3data(info);
-}
+    const PlayerStatus s = player.status();
+    battery.update();
+    ui.updatePower();
+    ui.render(s, battery.percent());
 
-void audio_eof_mp3(const char *info){  //end of file
-    if(g_display) g_display->audio_eof_mp3(info);
-    controls.playNext(); 
-}
+    // ---- power policy ----
+    const uint32_t now = millis();
+    if (s.paused) { if (!pausedSince) pausedSince = now | 1; }
+    else pausedSince = 0;
+    if (cfg::SLEEP_AFTER_PAUSE_MS && pausedSince && !ui.awake() &&
+        now - pausedSince > cfg::SLEEP_AFTER_PAUSE_MS)
+        deepSleep("Sleeping");
+    if (belowCutoff(battery.millivolts(), cfg::VBAT_CUTOFF_MV))
+        deepSleep("Battery low");
 
+    vTaskDelay(pdMS_TO_TICKS(5));  // ~200 Hz UI loop; drawing only happens on change
+}
