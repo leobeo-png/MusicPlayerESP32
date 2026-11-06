@@ -2,8 +2,9 @@
 #include "Config.h"
 
 void Battery::begin() {
-    analogSetPinAttenuation(cfg::PIN_VBAT, ADC_11db);  // ~0.15..2.45 V usable range
-    last_ = millis() - cfg::VBAT_PERIOD_MS;            // sample on first update()
+    analogSetPinAttenuation(cfg::PIN_VBAT, ADC_11db);
+    for (int i = 0; i < 8; ++i) analogReadMilliVolts(cfg::PIN_VBAT);  // first conversions are junk
+    last_ = millis() - cfg::VBAT_PERIOD_MS;
 }
 
 // Typical 1-cell LiPo resting curve at light load (mV -> %).
@@ -28,7 +29,8 @@ bool Battery::update() {
     uint16_t mv = (uint16_t)(acc / 16 * cfg::VBAT_DIVIDER * cfg::VBAT_CAL);
 
     // Light IIR filter so audio-load ripple doesn't make the icon jump.
-    mv_ = primed_ ? (uint16_t)((mv_ * 3u + mv) / 4u) : mv;
+    const bool snap = !primed_ || abs((int)mv - (int)mv_) > 300;
+    mv_ = snap ? mv : (uint16_t)((mv_ * 3u + mv) / 4u);
     primed_ = true;
     pct_ = lipoPercent(mv_);
     Serial.printf("[bat] %u mV (%u%%)\n", mv_, pct_);
