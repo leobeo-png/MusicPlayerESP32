@@ -1,64 +1,105 @@
 #pragma once
-// All TFT drawing. Runs only in the Arduino loop task (core 1); draws only what changed.
+// iPod-style UI. Runs only in the Arduino loop task (core 1); draws only what changed.
+//   Lists:        rotate = move, hold+rotate = page, click = select, long press = back
+//   Now Playing:  rotate = volume, hold+rotate = prev/next, click = play/pause, long press = back
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include "Player.h"
 #include "MusicLibrary.h"
+#include "Input.h"
 
 class Ui {
 public:
-    Ui(TFT_eSPI& tft, MusicLibrary& lib) : tft_(tft), lib_(lib) {}
+    Ui(TFT_eSPI& tft, MusicLibrary& lib, Player& player) : tft_(tft), lib_(lib), player_(player) {}
 
-    void begin();                    // panel + backlight (call before SD so errors can be shown)
-    void loadFont();                 // after SD is mounted
-    void clear();
-    void message(const char* line1, const char* line2 = nullptr);  // full-screen notice
+    void begin();     // panel, backlight, saved settings (before SD so errors can be shown)
+    void loadFont();  // after SD is mounted
+    void message(const char* line1, const char* line2 = nullptr);
+    void showHome();  // initial screen stack: Main > Now Playing
 
-    void render(const PlayerStatus& s, uint8_t batteryPct);
-    void showVolume() { volShownAt_ = millis() | 1; }
-
-    // Browse mode: list cursor moves independently of the playing track.
-    bool browsing() const { return browsing_; }
-    void browseStart(int32_t from);
-    void browseMove(int delta);
-    int32_t browseEnd();             // returns selected index
+    void handle(const InputMsg& m);
+    void render(const PlayerStatus& s, uint8_t batPct, uint16_t batMv);
 
     // Power
-    void touch();                    // user activity: wake / undim
-    void updatePower();              // dim -> off timeline
-    bool awake() const { return state_ != Scr::Off; }
-    uint32_t idleMs() const { return millis() - lastTouch_; }
+    void updatePower();
+    bool awake() const { return scr_ != Panel::Off; }
     void sleepPanel();
+    void wake();
+    bool sleepTimerDue() const { return sleepAt_ && (int32_t)(millis() - sleepAt_) >= 0; }
+
+    // Rescan requested from Settings (survives the reboot that applies it)
+    static bool takeRescanFlag();
 
 private:
-    enum class Scr : uint8_t { On, Dim, Off };
-    void setBacklight(uint8_t level);
-    void invalidate();
+    enum class Screen : uint8_t { NowPlaying, Main, Songs, Folders, FolderSongs, Settings };
+    enum class Panel : uint8_t { On, Dim, Off };
+    struct View { Screen scr; int16_t sel, top, arg; };
 
-    void drawHeader(const PlayerStatus& s);
-    void drawMeta(const PlayerStatus& s);
-    void drawTime(const PlayerStatus& s);
-    void drawProgress(const PlayerStatus& s);
-    void drawPlayIcon(bool paused);
-    void drawVolume(uint8_t v, bool visible);
-    void drawBattery(uint8_t pct);
-    void drawList(int32_t highlight);
+    // navigation
+    View& cur() { return stack_[depth_ - 1]; }
+    void push(Screen s, int16_t arg = 0, int16_t sel = 0);
+    void pop();
+    void goNowPlaying();
+
+    // list model
+    int  itemCount(const View& v) const;
+    void itemLabel(const View& v, int i, char* buf, size_t len) const;
+    bool itemValue(const View& v, int i, char* buf, size_t len, const PlayerStatus& s) const;
+    bool itemHasChild(const View& v, int i) const;
+    int  itemSong(const View& v, int i) const;   // song index for song rows, else -1
+    const char* title(const View& v) const;
+    void select(int i);
+
+    // drawing
+    void clearBody();
+    void drawHeader(const char* title, bool paused, uint8_t pct);
+    void renderList(const PlayerStatus& s);
+    void drawRow(const View& v, int row, int i, const PlayerStatus& s);
+    void drawScrollbar(int count, int top);
+    void renderNowPlaying(const PlayerStatus& s);
+    void npMeta(const PlayerStatus& s);
+    void npProgress(const PlayerStatus& s, bool full);
+    void npTransport(bool paused);
+    void npVolume(uint8_t v);
+    void npStatus(const PlayerStatus& s);
+
+    // settings
+    void loadSettings();
+    void saveSettings();
+    void setBacklight(uint8_t level);
+    uint32_t dimMs() const;
+    uint32_t offMs() const;
 
     TFT_eSPI& tft_;
     MusicLibrary& lib_;
+    Player& player_;
     int W_ = 240, H_ = 320;
 
-    // last drawn state (-1 / sentinel = force redraw)
-    uint32_t metaSeq_ = UINT32_MAX;
-    int32_t  track_ = -2, listTop_ = -1, listHi_ = -2;
-    int32_t  posSec_ = -1, durSec_ = -1, barW_ = -1;
-    int8_t   paused_ = -1, vol_ = -1, bat_ = -1;
-    bool     volVisible_ = false;
-    uint32_t volShownAt_ = 0;
+    View stack_[6];
+    uint8_t depth_ = 0;
+    bool full_ = true;              // screen changed -> clear and redraw everything
 
-    bool     browsing_ = false;
-    int32_t  cursor_ = 0;
+    // header cache
+    const char* hdrTitle_ = nullptr;
+    int8_t hdrPaused_ = -1, hdrPct_ = -1;
 
-    Scr      state_ = Scr::On;
+    // list cache
+    int16_t lTop_ = -1, lSel_ = -1;
+    int32_t lTrack_ = -2;
+    uint32_t lKey_ = 0;             // settings values hash -> redraw on change
+
+    // now playing cache
+    uint32_t npSeq_ = 0;
+    int32_t npPos_ = -1, npDur_ = -1, npBar_ = -1;
+    int8_t npPaused_ = -1, npVol_ = -1;
+    uint32_t npStatKey_ = 0;
+
+    // settings (NVS "ui")
+    uint8_t briIdx_ = 4, dimIdx_ = 1, offIdx_ = 1, sleepIdx_ = 0;
+    uint32_t sleepAt_ = 0;
+    uint16_t batMv_ = 0;
+    uint8_t batPct_ = 0;
+
+    Panel scr_ = Panel::On;
     uint32_t lastTouch_ = 0;
 };

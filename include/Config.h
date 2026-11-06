@@ -35,7 +35,7 @@ constexpr uint32_t VBAT_PERIOD_MS = 10000;
 constexpr const char* MUSIC_DIR  = "/music";
 constexpr const char* INDEX_FILE = "/song_index.txt";
 constexpr const char* SD_FONT    = "/fonts/ZenMaruGothic-Regular-16-minJap-noSmooth"; // no .vlw
-constexpr bool RESCAN_ON_BOOT    = true;  // false: only rescan if index missing or button held at boot
+constexpr bool RESCAN_ON_BOOT    = false; // rescan via Settings > Rescan library, or hold knob at power-on
 
 // ---- Audio / UX ----
 constexpr uint8_t  VOLUME_MAX       = 21;

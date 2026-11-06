@@ -25,15 +25,20 @@ This project was a way to explore I²S audio and the [ESP32-audioI2S](https://gi
 ---
 
 ## Controls
-| Action | Now Playing | Browse list |
+| Action | Now Playing | Menus / lists |
 |---|---|---|
-| Rotate | Volume | Move cursor |
-| Click | Play / pause | Play selected song |
-| Hold + rotate | Next / previous track (prev restarts song if >3 s in) | Fast scroll |
-| Long press (0.7 s) | Open browse list | Close list |
-| Hold at power-on | Force library rescan | |
+| Rotate | Volume | Move selection |
+| Click | Play / pause | Select |
+| Hold + rotate | Next / previous (prev restarts song if >3 s in) | Page up / down |
+| Long press (0.7 s) | Back | Back (from Music menu: Now Playing) |
+| Hold at power-on | Rescan library | |
 
-Screen dims after 10 s and sleeps after 30 s. Paused for 10 min with the screen off -> deep sleep; press the knob to wake and resume where you left off.
+Menu: **Now Playing · Songs (A–Z) · Folders · Shuffle All · Settings**.
+Playing a song from a folder queues that folder; from Songs queues the whole library A–Z.
+Settings: shuffle, repeat (off/all/one), brightness, dim / screen-off timeouts, sleep timer, rescan, battery, library size. Saved across power-off.
+
+When the screen turns off the UI returns to Now Playing, so the knob always controls volume / pause blind.
+Paused for 10 min with the screen off -> deep sleep; press the knob to wake and resume where you left off.
 
 ## Firmware layout
 | File | Role |
