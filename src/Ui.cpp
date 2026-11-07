@@ -55,6 +55,7 @@ void fmtSecs(char* b, size_t n, uint16_t s) {
 void Ui::begin() {
     tft_.init();
     tft_.setRotation(2);
+    tft_.invertDisplay(false);
     tft_.setSwapBytes(true);
     W_ = tft_.width();
     H_ = tft_.height();

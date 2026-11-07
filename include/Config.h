@@ -28,7 +28,7 @@ constexpr bool ENC_HALF_STEP = false; // set true if one detent = half a quadrat
 // ---- Battery sense ----
 constexpr int   PIN_VBAT      = 34;           // ADC1
 constexpr float VBAT_DIVIDER  = 147.0f / 100.0f; // (R1 + R2) / R2, 47k top / 100k bottom
-constexpr float VBAT_CAL = 4.075f / 3.62f;        // trim: multimeter_V / reported_V (see Serial log)
+constexpr float VBAT_CAL = 1.125f;        // trim: multimeter_V / reported_V (4.075f / 3.62f)
 constexpr uint32_t VBAT_PERIOD_MS = 10000;
 
 // ---- Files ----
